@@ -50,9 +50,20 @@ This repo is **opinionated and practical**, based on real interview experiences.
 ---
 
 ## Each Folder and content
+
+### Defer 使用與時機
+Save in Stack, LIFO
+
 ### EscapeAnalysis
 Research the Memory Escape and example
 研究Golang 的內存逃逸狀況與案例
 
 ### Golang Redis Spin Lock
 Redis 自旋鎖 = 拿不到鎖就一直嘗試（sleep + retry），直到成功或超時
+
+### Panic and defer and recover
+panic 發生
+↓
+執行 defer
+↓
+defer 中呼叫 recover() 才能捕捉

@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -97,25 +98,72 @@ func (l *RedisSpinLock) Unlock(ctx context.Context) error {
 // ================================
 // Demo 使用
 // ================================
+// func main() {
+// 	rdb := NewRedisClient()
+// 	defer rdb.Close()
+
+// 	lock := NewRedisSpinLock(
+// 		rdb,
+// 		"demo:spinlock:order:123",
+// 		5*time.Second, // 鎖 TTL
+// 	)
+
+// 	err := lock.Lock(ctx, 3*time.Second) // 自旋最多 3 秒
+// 	if err != nil {
+// 		panic(err)
+// 	}
+
+// 	defer lock.Unlock(ctx)
+
+// 	// ====== Critical Section ======
+// 	fmt.Println("🚀 Doing critical work...")
+// 	time.Sleep(2 * time.Second)
+// 	fmt.Println("✅ Done")
+// }
+
+// 5 個工作 goroutine 競爭同一把鎖 的範例
 func main() {
 	rdb := NewRedisClient()
 	defer rdb.Close()
 
-	lock := NewRedisSpinLock(
-		rdb,
-		"demo:spinlock:order:123",
-		5*time.Second, // 鎖 TTL
-	)
+	ctx := context.Background()
+	var wg sync.WaitGroup
 
-	err := lock.Lock(ctx, 3*time.Second) // 自旋最多 3 秒
-	if err != nil {
-		panic(err)
+	workerCount := 5
+	lockKey := "demo:spinlock:order:123"
+
+	fmt.Println("🚦 Start competing for the lock")
+
+	for i := 1; i <= workerCount; i++ {
+		wg.Add(1)
+
+		go func(id int) {
+			defer wg.Done()
+
+			lock := NewRedisSpinLock(
+				rdb,
+				lockKey,
+				5*time.Second, // TTL
+			)
+
+			fmt.Printf("Worker %d: trying to acquire lock...\n", id)
+
+			err := lock.Lock(ctx, 3*time.Second)
+			if err != nil {
+				fmt.Printf("Worker %d: ❌ failed to acquire lock: %v\n", id, err)
+				return
+			}
+
+			defer lock.Unlock(ctx)
+
+			// ===== Critical Section =====
+			fmt.Printf("Worker %d: 🔐 acquired lock\n", id)
+			time.Sleep(1 * time.Second)
+			fmt.Printf("Worker %d: 🔓 releasing lock\n", id)
+
+		}(i)
 	}
 
-	defer lock.Unlock(ctx)
-
-	// ====== Critical Section ======
-	fmt.Println("🚀 Doing critical work...")
-	time.Sleep(2 * time.Second)
-	fmt.Println("✅ Done")
+	wg.Wait()
+	fmt.Println("🏁 All workers finished")
 }
